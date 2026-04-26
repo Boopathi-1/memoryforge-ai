@@ -1,57 +1,129 @@
-# Stateful AI Chatbot — Intelligent Memory Architecture
+# MemoryForge AI
 
-## Quick Start
+MemoryForge AI is a stateful chatbot built with FastAPI, Groq, SQLite, and a custom memory pipeline that helps the assistant stay coherent across longer conversations.
 
-```bash
-pip install -r requirements.txt
-cp .env.example .env        # add your GROQ_API_KEY
-uvicorn app.main:app --reload
-# open chat_ui.html in your browser
+Instead of sending the entire chat history on every request, the app keeps a short-term working window of recent messages and compresses older context into a long-term summary. That gives you lower prompt size, better continuity, and a clearer view into how conversational memory works.
+
+## Highlights
+
+- Persistent session-based chat memory
+- Short-term memory window for recent turns
+- Long-term memory summaries for older context
+- Automatic summarization after the conversation grows
+- SQLite-backed message and summary storage
+- FastAPI backend with simple REST endpoints
+- Debug UI for inspecting memory state, token estimates, and message logs
+
+## How It Works
+
+1. A user message is sent to `/api/chat`.
+2. The message is stored in SQLite with a session id and turn number.
+3. The app builds context using:
+   recent messages for short-term memory
+   stored summary for long-term memory
+4. If the conversation is large enough, older messages are summarized and saved.
+5. The merged context is sent to the Groq model.
+6. The assistant reply is stored and returned with memory statistics.
+
+## Memory Architecture
+
+| Layer | Purpose | Stored As |
+|---|---|---|
+| Short-term memory | Keeps the latest conversation turns verbatim | Recent messages in DB |
+| Long-term memory | Compresses older chat history | Session summary in DB |
+| Context builder | Prepares the final prompt for the model | In memory at request time |
+
+Default behavior in the current project:
+
+- `SHORT_TERM_LIMIT = 10`
+- `SUMMARY_TRIGGER = 20`
+- `MAX_TOKENS = 1024`
+
+## Tech Stack
+
+- FastAPI
+- Groq API
+- SQLAlchemy
+- SQLite
+- Pydantic
+- Static HTML/CSS/JS frontend
+
+## Project Structure
+
+```text
+app/
+  api/         # FastAPI routes
+  core/        # settings and config
+  db/          # database setup and models
+  schemas/     # request/response models
+  services/    # LLM and memory logic
+  utils/       # helpers such as session id generation
+chat_ui.html   # browser UI with debug panel
 ```
-
-## Architecture
-
-```
-User Message
-     │
-     ▼
-┌──────────────────────────────────────────────┐
-│             FastAPI  /api/chat               │
-│                                              │
-│  1. Store user message (DB)                  │
-│  2. Build context ──────────────────────┐   │
-│       ├─ Long-term summary (DB)         │   │
-│       └─ Short-term window (last 10)    │   │
-│  3. Auto-summarise if > 20 msgs  ◄──────┘   │
-│  4. Call Groq LLM                            │
-│  5. Store assistant reply (DB)               │
-└──────────────────────────────────────────────┘
-     │
-     ▼
-ChatResponse { reply, session_id, memory_stats }
-```
-
-## Memory Layers
-
-| Layer       | Storage    | Content                          | Tokens  |
-|-------------|------------|----------------------------------|---------|
-| Short-term  | DB (live)  | Last 10 messages verbatim        | ~1-2k   |
-| Long-term   | DB summary | Bullet-point summary of older msgs | ~400  |
-| Context     | In-memory  | Summary + recent merged for LLM  | <4k     |
 
 ## API Endpoints
 
-| Method | Path                   | Description                     |
-|--------|------------------------|---------------------------------|
-| POST   | /api/chat              | Send a message                  |
-| GET    | /api/memory/{sid}      | Inspect full memory state       |
-| POST   | /api/clear             | Clear session memory            |
-| GET    | /                      | Health check                    |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/chat` | Send a message and get the assistant reply |
+| `GET` | `/api/memory/{session_id}` | Inspect stored messages, summary, and memory stats |
+| `POST` | `/api/clear` | Clear a session's memory |
+| `GET` | `/` | Health check |
 
-## Debug UI
+## Local Setup
 
-Open `chat_ui.html` in your browser. Toggle **DEBUG** in the header to reveal:
+### 1. Install dependencies
 
-- **MEMORY tab** — live stats: total messages, short-term window, archived count, estimated tokens, long-term summary status
-- **MSG LOG tab** — full conversation history with turn numbers
-- **JSON tab** — raw API state for inspection
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Add environment variables
+
+Create a `.env` file from `.env.example` and add your Groq key:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### 3. Run the backend
+
+```bash
+uvicorn app.main:app --reload
+```
+
+### 4. Open the UI
+
+Open `chat_ui.html` in your browser.
+
+## Debug Features
+
+The frontend includes a debug panel to help inspect how memory evolves during a conversation.
+
+- `MEMORY` tab shows total messages, short-term count, archived count, summary coverage, and estimated tokens
+- `MSG LOG` tab shows the stored message history with turn numbers
+- `JSON` tab shows the raw memory state returned by the backend
+
+## Why This Project Stands Out
+
+This project is more than a basic chatbot demo. It shows how to build:
+
+- context-aware conversational systems
+- practical long-session memory management
+- cost-conscious prompt construction
+- observable AI applications with inspectable internal state
+
+It is a strong foundation for assistants, support bots, AI companions, learning tools, and portfolio demos focused on applied LLM engineering.
+
+## Future Improvements
+
+- streaming responses
+- authentication and multi-user support
+- vector memory or retrieval augmentation
+- richer summarization strategies
+- deployment setup for cloud hosting
+- improved frontend session management
+
+## License
+
+This project currently has no license file. Add one before distributing it broadly if needed.

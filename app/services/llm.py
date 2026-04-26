@@ -1,6 +1,6 @@
-import json
 from typing import Dict, List
-from urllib import error, request
+
+from groq import Groq
 
 from app.core.config import settings
 
@@ -13,51 +13,23 @@ SYSTEM_PROMPT = {
     )
 }
 
-GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-
-def _chat_completion(messages: List[Dict], max_tokens: int, temperature: float) -> str:
+def _client() -> Groq:
     if not settings.GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY is missing in environment")
-
-    payload = json.dumps(
-        {
-            "model": settings.MODEL,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }
-    ).encode("utf-8")
-
-    req = request.Request(
-        GROQ_CHAT_URL,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-        },
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(req, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"]
-    except error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code}: {body}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Connection error: {exc.reason}") from exc
+    return Groq(api_key=settings.GROQ_API_KEY, timeout=30, max_retries=1)
 
 
 def get_ai_response(messages: List[Dict]) -> str:
     try:
         full = [SYSTEM_PROMPT] + messages
-        return _chat_completion(
+        resp = _client().chat.completions.create(
+            model=settings.MODEL,
             messages=full,
             max_tokens=settings.MAX_TOKENS,
             temperature=0.7,
         )
+        return resp.choices[0].message.content
     except Exception as e:
         return f"[LLM Error] {e}"
 
@@ -73,10 +45,12 @@ def summarise_messages(messages: List[Dict]) -> str:
         + transcript
     )
     try:
-        return _chat_completion(
+        resp = _client().chat.completions.create(
+            model=settings.MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.3,
         )
+        return resp.choices[0].message.content
     except Exception as e:
         return f"[Summary Error] {e}"
